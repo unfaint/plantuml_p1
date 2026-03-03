@@ -4,7 +4,8 @@ import { lightHighlightExtension, darkHighlightExtension } from './plantuml/high
 
 const lightTheme = EditorView.theme(
   {
-    '&': { backgroundColor: '#ffffff', color: '#1f2937' },
+    '&': { backgroundColor: '#ffffff', color: '#1f2937', height: '100%' },
+    '.cm-scroller': { overflow: 'auto' },
     '.cm-content': { caretColor: '#1f2937' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#1f2937' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
@@ -29,7 +30,8 @@ const lightTheme = EditorView.theme(
 
 const darkTheme = EditorView.theme(
   {
-    '&': { backgroundColor: '#1e1e2e', color: '#cdd6f4' },
+    '&': { backgroundColor: '#1e1e2e', color: '#cdd6f4', height: '100%' },
+    '.cm-scroller': { overflow: 'auto' },
     '.cm-content': { caretColor: '#cdd6f4' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#cdd6f4' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {

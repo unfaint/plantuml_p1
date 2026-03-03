@@ -11,7 +11,7 @@ export default function CodeEditor({ source, onChange }: CodeEditorProps) {
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-hidden"
+      className="h-full"
       style={{ fontSize: 13 }}
     />
   )

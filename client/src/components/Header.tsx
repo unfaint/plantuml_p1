@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 const COLORS = ['#f87171', '#fb923c', '#fbbf24', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
 
 function colorFromId(id: string): string {
@@ -15,6 +17,17 @@ interface HeaderProps {
 
 export default function Header({ userName, userId, userImageUrl, onSignOut }: HeaderProps) {
   const color = colorFromId(userId)
+  const [online, setOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   return (
     <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
@@ -53,10 +66,10 @@ export default function Header({ userName, userId, userImageUrl, onSignOut }: He
           Sign out
         </button>
 
-        {/* Connected badge */}
-        <div className="flex items-center gap-1.5 text-sm text-gray-500">
-          <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-          <span>Connected</span>
+        {/* Online/offline badge */}
+        <div className={`flex items-center gap-1.5 text-sm ${online ? 'text-gray-500' : 'text-red-500'}`}>
+          <span className={`w-2 h-2 rounded-full inline-block ${online ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span>{online ? 'Connected' : 'Offline'}</span>
         </div>
       </div>
     </header>

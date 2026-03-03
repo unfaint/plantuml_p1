@@ -40,10 +40,14 @@ export default function SvgPreview({ source }: SvgPreviewProps) {
     )
   }
 
+  // Strip explicit pixel width/height so the SVG sizes from its viewBox naturally
+  const svg = (renderMutation.data?.svg ?? '')
+    .replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1')
+    .replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1')
+
   return (
-    <div
-      className="flex-1 overflow-auto p-4 bg-gray-50 flex items-start justify-center"
-      dangerouslySetInnerHTML={{ __html: renderMutation.data?.svg ?? '' }}
-    />
+    <div className="flex-1 overflow-auto p-4 bg-gray-50 flex items-start justify-center">
+      <div dangerouslySetInnerHTML={{ __html: svg }} />
+    </div>
   )
 }
