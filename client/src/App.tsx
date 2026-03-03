@@ -84,7 +84,7 @@ function AuthenticatedShell() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [commentsCollapsed, setCommentsCollapsed] = useState(false)
+  const [commentsCollapsed, setCommentsCollapsed] = useState(true)
 
   const userName = user!.fullName ?? user!.firstName ?? user!.primaryEmailAddress?.emailAddress ?? 'User'
 
