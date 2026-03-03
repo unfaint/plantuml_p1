@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@demo/server/*": ["../server/src/*"]
+    }
+  },
+  "include": ["src"]
+}

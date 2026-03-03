@@ -1,0 +1,68 @@
+@top Program { (statement | blankLine)* }
+
+@detectDelim
+
+statement {
+  StartLine |
+  EndLine |
+  CommentLine |
+  BlockComment |
+  PreprocLine |
+  ContentLine
+}
+
+StartLine   { StartMarker lineContent* newline }
+EndLine     { EndMarker   lineContent* newline }
+CommentLine { LineComment newline }
+PreprocLine { PreprocKeyword lineContent* newline }
+ContentLine { lineContent+ newline }
+blankLine   { newline }
+
+lineContent {
+  kw<"participant"> | kw<"actor"> | kw<"boundary"> | kw<"control"> |
+  kw<"entity"> | kw<"database"> | kw<"collections"> | kw<"queue"> |
+  kw<"class"> | kw<"interface"> | kw<"abstract"> | kw<"enum"> |
+  kw<"extends"> | kw<"implements"> | kw<"as"> |
+  kw<"group"> | kw<"loop"> | kw<"alt"> | kw<"else"> | kw<"opt"> |
+  kw<"par"> | kw<"break"> | kw<"end"> |
+  kw<"note"> | kw<"hnote"> | kw<"rnote"> | kw<"endnote"> |
+  kw<"over"> | kw<"left"> | kw<"right"> |
+  kw<"skinparam"> | kw<"title"> | kw<"header"> | kw<"footer"> |
+  Arrow | ColonOp | String | Identifier | Other
+}
+
+kw<term> { @specialize[@name={term}]<Identifier, term> }
+
+@skip { space }
+
+@tokens {
+  newline { "\n" | "\r\n" | "\r" }
+  space   { $[ \t]+ }
+
+  StartMarker { "@start" $[a-zA-Z]* }
+  EndMarker   { "@end"   $[a-zA-Z]* }
+
+  Arrow {
+    "-->>" | "-->" | "->>" | "->" |
+    "<<--" | "<--" |
+    "--|>" | "<|--" |
+    "o--" | "--o" | "*--" | "--*" |
+    "..>" | "<.." | ".."
+  }
+
+  ColonOp { ":" }
+
+  String { '"' ($[^\n\r"\\] | "\\" $[^\n\r])* '"' }
+
+  LineComment { "'" ![\n\r]* }
+
+  BlockComment { "/'" ($[^'] | "'" $[^/])* "'/" }
+
+  PreprocKeyword { "!" $[a-zA-Z]+ }
+
+  Identifier { $[a-zA-Z_] $[a-zA-Z0-9_\-]* }
+
+  Other { $[,.()\[\]{}/+#~^&=%$?;0-9\\] }
+
+  @precedence { StartMarker, EndMarker, PreprocKeyword, LineComment, BlockComment, Arrow, Identifier, Other }
+}
