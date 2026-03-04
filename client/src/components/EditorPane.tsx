@@ -9,11 +9,13 @@ import { CollabEditor } from '../editor/CollabEditor.tsx'
 import SvgPreview from './SvgPreview.tsx'
 
 type ConnStatus = 'connecting' | 'connected' | 'disconnected'
+type EffectiveRole = 'personal-owner' | 'owner' | 'admin' | 'member'
 
 interface EditorPaneProps {
   id: string
   onDelete: () => void
   onConnStatusChange?: (status: ConnStatus) => void
+  effectiveRole: EffectiveRole
 }
 
 interface RemoteUser {
@@ -33,7 +35,7 @@ function colorFromId(id: string): string {
 const MIN_PCT = 20
 const MAX_PCT = 80
 
-export default function EditorPane({ id, onDelete, onConnStatusChange }: EditorPaneProps) {
+export default function EditorPane({ id, onDelete, onConnStatusChange, effectiveRole }: EditorPaneProps) {
   const { getToken } = useAuth()
   const { user } = useUser()
 
@@ -198,6 +200,7 @@ export default function EditorPane({ id, onDelete, onConnStatusChange }: EditorP
   }
 
   const isPublic = diagram?.is_public ?? false
+  const canWrite = effectiveRole !== 'member'
 
   return (
     <div className="flex flex-col min-h-0 h-full">
@@ -228,18 +231,20 @@ export default function EditorPane({ id, onDelete, onConnStatusChange }: EditorP
           </div>
         )}
 
-        {/* Public toggle */}
-        <button
-          onClick={handleTogglePublic}
-          disabled={togglePublicMutation.isPending}
-          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
-            isPublic
-              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          {isPublic ? 'Public' : 'Private'}
-        </button>
+        {/* Public toggle (owner/admin only) */}
+        {canWrite && (
+          <button
+            onClick={handleTogglePublic}
+            disabled={togglePublicMutation.isPending}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              isPublic
+                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {isPublic ? 'Public' : 'Private'}
+          </button>
+        )}
 
         {/* Share link (only when public) */}
         {isPublic && (
@@ -251,14 +256,16 @@ export default function EditorPane({ id, onDelete, onConnStatusChange }: EditorP
           </button>
         )}
 
-        {/* Delete */}
-        <button
-          onClick={handleDelete}
-          disabled={deleteMutation.isPending}
-          className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium transition-colors"
-        >
-          Delete
-        </button>
+        {/* Delete (owner/admin only) */}
+        {canWrite && (
+          <button
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium transition-colors"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Split: editor | preview */}

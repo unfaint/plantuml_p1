@@ -1,10 +1,14 @@
+import { useState } from 'react'
 import { trpc } from '../trpc.ts'
+import { useWorkspace } from '../context/WorkspaceContext.tsx'
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
   selectedId: string | null
   onSelect: (id: string) => void
+  onWorkspaceChange: (id: string | null) => void
+  onOpenWorkspaceSettings: () => void
 }
 
 function DocIcon() {
@@ -28,13 +32,75 @@ function SproutIcon() {
   )
 }
 
+function GearIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="2.5" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+    </svg>
+  )
+}
+
 function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export default function Sidebar({ collapsed, onToggle, selectedId, onSelect }: SidebarProps) {
-  const { data: diagrams = [], isLoading } = trpc.diagrams.list.useQuery()
+function CreateWorkspaceInline({ onCreated }: { onCreated: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
   const utils = trpc.useUtils()
+  const createWsMutation = trpc.workspaces.create.useMutation({
+    onSuccess: (ws) => {
+      void utils.workspaces.list.invalidate()
+      setOpen(false)
+      setName('')
+      onCreated(ws.id)
+    },
+  })
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full text-xs text-gray-400 hover:text-green-600 py-1.5 text-left px-1 transition-colors"
+      >
+        + New Workspace
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex gap-1 mt-1">
+      <input
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && name.trim()) createWsMutation.mutate({ name: name.trim() })
+          if (e.key === 'Escape') { setOpen(false); setName('') }
+        }}
+        placeholder="Workspace name"
+        className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-300"
+      />
+      <button
+        onClick={() => { if (name.trim()) createWsMutation.mutate({ name: name.trim() }) }}
+        disabled={!name.trim() || createWsMutation.isPending}
+        className="text-xs bg-green-600 disabled:opacity-50 text-white px-2 rounded"
+      >
+        ✓
+      </button>
+    </div>
+  )
+}
+
+export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onWorkspaceChange, onOpenWorkspaceSettings }: SidebarProps) {
+  const { selectedWorkspaceId } = useWorkspace()
+  const { data: workspaceList = [] } = trpc.workspaces.list.useQuery()
+  const { data: diagrams = [], isLoading } = trpc.diagrams.list.useQuery(
+    { workspace_id: selectedWorkspaceId }
+  )
+  const utils = trpc.useUtils()
+
   const createMutation = trpc.diagrams.create.useMutation({
     onSuccess: (diagram) => {
       void utils.diagrams.list.invalidate()
@@ -42,14 +108,16 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect }: S
     },
   })
 
+  function handleCreate() {
+    createMutation.mutate(selectedWorkspaceId ? { workspace_id: selectedWorkspaceId } : {})
+  }
+
+  const currentRole = workspaceList.find(w => w.id === selectedWorkspaceId)?.role ?? null
+
   if (collapsed) {
     return (
       <aside className="flex flex-col items-center py-3 gap-4 border-r border-gray-100 bg-white shrink-0" style={{ width: 52 }}>
-        <button
-          onClick={onToggle}
-          className="text-gray-400 hover:text-gray-700 text-xs font-mono px-1"
-          title="Expand sidebar"
-        >
+        <button onClick={onToggle} className="text-gray-400 hover:text-gray-700 text-xs font-mono px-1" title="Expand sidebar">
           &gt;&gt;
         </button>
         <button title="Diagrams" className="text-gray-400 hover:text-gray-700 p-1">
@@ -57,7 +125,7 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect }: S
         </button>
         <div className="flex-1" />
         <button
-          onClick={() => createMutation.mutate()}
+          onClick={handleCreate}
           title="Sprout New Diagram"
           className="text-green-600 p-1"
           disabled={createMutation.isPending}
@@ -73,20 +141,42 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect }: S
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Garden Patch</span>
-        <button
-          onClick={onToggle}
-          className="text-gray-400 hover:text-gray-700 text-xs font-mono px-1"
-          title="Collapse sidebar"
-        >
+        <button onClick={onToggle} className="text-gray-400 hover:text-gray-700 text-xs font-mono px-1" title="Collapse sidebar">
           &lt;&lt;
         </button>
       </div>
 
+      {/* Workspace switcher */}
+      <div className="px-3 pt-3 pb-2 border-b border-gray-100">
+        <div className="flex items-center gap-1.5">
+          <select
+            value={selectedWorkspaceId ?? ''}
+            onChange={e => onWorkspaceChange(e.target.value || null)}
+            className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-green-300"
+          >
+            <option value="">Personal</option>
+            {workspaceList.map(ws => (
+              <option key={ws.id} value={ws.id}>{ws.name}</option>
+            ))}
+          </select>
+          {selectedWorkspaceId && (
+            <button
+              onClick={onOpenWorkspaceSettings}
+              className="text-gray-400 hover:text-gray-700 p-1 rounded"
+              title="Workspace settings"
+            >
+              <GearIcon />
+            </button>
+          )}
+        </div>
+        {selectedWorkspaceId && currentRole && (
+          <span className="text-xs text-gray-400 pl-1 mt-0.5 block capitalize">{currentRole}</span>
+        )}
+      </div>
+
       {/* Diagram list */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
-        {isLoading && (
-          <div className="text-xs text-gray-400 px-1 py-2">Loading…</div>
-        )}
+        {isLoading && <div className="text-xs text-gray-400 px-1 py-2">Loading…</div>}
         {!isLoading && diagrams.length === 0 && (
           <div className="text-xs text-gray-400 px-1 py-4 text-center">
             No diagrams yet. Sprout one!
@@ -109,16 +199,19 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect }: S
         ))}
       </div>
 
-      {/* Sprout button */}
-      <div className="p-3 border-t border-gray-100">
+      {/* Bottom actions */}
+      <div className="p-3 border-t border-gray-100 flex flex-col gap-2">
         <button
-          onClick={() => createMutation.mutate()}
+          onClick={handleCreate}
           disabled={createMutation.isPending}
           className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
         >
           <SproutIcon />
           {createMutation.isPending ? 'Creating…' : 'Sprout New Diagram'}
         </button>
+        {!selectedWorkspaceId && (
+          <CreateWorkspaceInline onCreated={id => onWorkspaceChange(id)} />
+        )}
       </div>
     </aside>
   )
