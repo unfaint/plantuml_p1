@@ -123,6 +123,11 @@ export default function SvgPreview({ svgContent, remoteUsers, onCursorMove, onCu
 
   const onDoubleClick = useCallback(() => setTransform(INIT), [])
 
+  const zoomIn  = useCallback(() =>
+    setTransform(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.25) })), [])
+  const zoomOut = useCallback(() =>
+    setTransform(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.25) })), [])
+
   // Throttled cursor broadcast — normalize against the SVG element's screen bounds
   const onMouseMove = useCallback((e: ReactMouseEvent) => {
     if (!onCursorMove) return
@@ -142,48 +147,54 @@ export default function SvgPreview({ svgContent, remoteUsers, onCursorMove, onCu
     onCursorLeave?.()
   }, [onCursorLeave])
 
-  if (!svgContent) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm bg-gray-50">
-        Start typing PlantUML to see the preview
-      </div>
-    )
-  }
-
   const activeCursors = remoteUsers?.filter(u => u.previewCursor !== null) ?? []
 
   return (
     <div
       ref={containerRef}
       className="flex-1 bg-gray-50 relative overflow-hidden"
-      style={{ cursor: 'grab' }}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
-      onDoubleClick={onDoubleClick}
+      style={{ cursor: svgContent ? 'grab' : 'default' }}
+      onMouseDown={svgContent ? onMouseDown : undefined}
+      onMouseMove={svgContent ? onMouseMove : undefined}
+      onMouseLeave={svgContent ? onMouseLeave : undefined}
+      onDoubleClick={svgContent ? onDoubleClick : undefined}
     >
-      {/* Transformed layer — cursor markers live here so they zoom/pan with the SVG */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          transformOrigin: '0 0',
-          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-        }}
-      >
-        {/* inline-block so it sizes to the SVG; markers use percentage coords against it */}
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-          <div dangerouslySetInnerHTML={{ __html: svgContent }} />
-          {activeCursors.map((u, i) => (
-            <CursorMarker key={i} user={u} cursor={u.previewCursor!} />
-          ))}
+      {!svgContent ? (
+        <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          Start typing PlantUML to see the preview
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Transformed layer — cursor markers live here so they zoom/pan with the SVG */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              transformOrigin: '0 0',
+              transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            }}
+          >
+            {/* inline-block so it sizes to the SVG; markers use percentage coords against it */}
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+              {activeCursors.map((u, i) => (
+                <CursorMarker key={i} user={u} cursor={u.previewCursor!} />
+              ))}
+            </div>
+          </div>
 
-      <div className="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none select-none">
-        Scroll to zoom · Drag to pan · Double-click to reset
-      </div>
+          <div
+            className="absolute bottom-3 right-3 flex items-center gap-1 bg-white/90 border border-gray-200 rounded-md px-2 py-1 text-xs shadow-sm select-none"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <button onClick={zoomOut} className="px-1 leading-none text-gray-600 hover:text-gray-900">−</button>
+            <span className="min-w-[40px] text-center text-gray-600">{Math.round(transform.scale * 100)}%</span>
+            <button onClick={zoomIn}  className="px-1 leading-none text-gray-600 hover:text-gray-900">+</button>
+            <button onClick={() => setTransform(INIT)} title="Reset" className="px-1 leading-none text-gray-600 hover:text-gray-900">↺</button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
