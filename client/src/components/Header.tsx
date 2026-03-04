@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react'
-
 const COLORS = ['#f87171', '#fb923c', '#fbbf24', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
 
 function colorFromId(id: string): string {
@@ -8,26 +6,28 @@ function colorFromId(id: string): string {
   return COLORS[hash % COLORS.length]!
 }
 
+const CONN_COLORS = {
+  connected:    'text-green-600',
+  connecting:   'text-amber-500',
+  disconnected: 'text-red-500',
+}
+
+const DOT_COLORS = {
+  connected:    'bg-green-500',
+  connecting:   'bg-amber-400',
+  disconnected: 'bg-red-500',
+}
+
 interface HeaderProps {
   userName: string
   userId: string
   userImageUrl?: string
   onSignOut: () => void
+  connStatus: 'connecting' | 'connected' | 'disconnected' | null
 }
 
-export default function Header({ userName, userId, userImageUrl, onSignOut }: HeaderProps) {
+export default function Header({ userName, userId, userImageUrl, onSignOut, connStatus }: HeaderProps) {
   const color = colorFromId(userId)
-  const [online, setOnline] = useState(() => navigator.onLine)
-  useEffect(() => {
-    const on = () => setOnline(true)
-    const off = () => setOnline(false)
-    window.addEventListener('online', on)
-    window.addEventListener('offline', off)
-    return () => {
-      window.removeEventListener('online', on)
-      window.removeEventListener('offline', off)
-    }
-  }, [])
 
   return (
     <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
@@ -66,11 +66,13 @@ export default function Header({ userName, userId, userImageUrl, onSignOut }: He
           Sign out
         </button>
 
-        {/* Online/offline badge */}
-        <div className={`flex items-center gap-1.5 text-sm ${online ? 'text-gray-500' : 'text-red-500'}`}>
-          <span className={`w-2 h-2 rounded-full inline-block ${online ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span>{online ? 'Connected' : 'Offline'}</span>
-        </div>
+        {/* WebSocket connection status — only shown when a diagram is open */}
+        {connStatus && (
+          <div className={`flex items-center gap-1.5 text-sm ${CONN_COLORS[connStatus]}`}>
+            <span className={`w-2 h-2 rounded-full inline-block ${DOT_COLORS[connStatus]}`} />
+            <span className="capitalize">{connStatus}</span>
+          </div>
+        )}
       </div>
     </header>
   )

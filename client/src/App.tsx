@@ -85,6 +85,7 @@ function AuthenticatedShell() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [commentsCollapsed, setCommentsCollapsed] = useState(true)
+  const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'disconnected' | null>(null)
 
   const userName = user!.fullName ?? user!.firstName ?? user!.primaryEmailAddress?.emailAddress ?? 'User'
 
@@ -97,6 +98,7 @@ function AuthenticatedShell() {
             userId={user!.id}
             userImageUrl={user!.imageUrl}
             onSignOut={() => void signOut()}
+            connStatus={connStatus}
           />
           <div className="flex flex-1 min-h-0">
             <Sidebar
@@ -107,7 +109,7 @@ function AuthenticatedShell() {
             />
             <div className="flex-1 min-w-0 flex flex-col min-h-0">
               {selectedId
-                ? <EditorPane key={selectedId} id={selectedId} onDelete={() => setSelectedId(null)} />
+                ? <EditorPane key={selectedId} id={selectedId} onDelete={() => { setSelectedId(null); setConnStatus(null) }} onConnStatusChange={setConnStatus} />
                 : (
                   <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
                     Select a diagram from the sidebar, or sprout a new one.

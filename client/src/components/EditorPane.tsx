@@ -1,53 +1,146 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { trpc } from '../trpc.ts'
-import CodeEditor from './CodeEditor.tsx'
+import { useAuth, useUser } from '@clerk/clerk-react'
+import * as Y from 'yjs'
+import { HocuspocusProvider } from '@hocuspocus/provider'
+import { trpc, trpcClient } from '../trpc.ts'
+import type { CollabAwareness } from '../editor/useCollabCodeMirror.ts'
+import { CollabEditor } from '../editor/CollabEditor.tsx'
 import SvgPreview from './SvgPreview.tsx'
+
+type ConnStatus = 'connecting' | 'connected' | 'disconnected'
 
 interface EditorPaneProps {
   id: string
   onDelete: () => void
+  onConnStatusChange?: (status: ConnStatus) => void
+}
+
+interface RemoteUser {
+  name: string
+  color: string
+  previewCursor: { x: number; y: number } | null
+}
+
+const COLORS = ['#f87171', '#fb923c', '#fbbf24', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
+
+function colorFromId(id: string): string {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return COLORS[hash % COLORS.length]!
 }
 
 const MIN_PCT = 20
 const MAX_PCT = 80
 
-export default function EditorPane({ id, onDelete }: EditorPaneProps) {
+export default function EditorPane({ id, onDelete, onConnStatusChange }: EditorPaneProps) {
+  const { getToken } = useAuth()
+  const { user } = useUser()
+
   const { data: diagram, isLoading } = trpc.diagrams.get.useQuery({ id })
   const utils = trpc.useUtils()
 
-  const saveMutation        = trpc.diagrams.save.useMutation({ onSuccess: () => void utils.diagrams.list.invalidate() })
-  const deleteMutation      = trpc.diagrams.delete.useMutation({ onSuccess: onDelete })
-  const togglePublicMutation = trpc.diagrams.togglePublic.useMutation({ onSuccess: () => void utils.diagrams.get.invalidate({ id }) })
+  const titleSaveMutation    = trpc.diagrams.save.useMutation()
+  const deleteMutation       = trpc.diagrams.delete.useMutation({ onSuccess: onDelete })
+  const togglePublicMutation = trpc.diagrams.togglePublic.useMutation({
+    onSuccess: () => void utils.diagrams.get.invalidate({ id }),
+  })
 
-  const [source, setSource] = useState('')
-  const [title, setTitle]   = useState('')
-  const [saved, setSaved]   = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [title, setTitle]           = useState('')
+  const [svgContent, setSvgContent] = useState('')
+  const [copied, setCopied]         = useState(false)
+  const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
+  const [awareness, setAwareness]   = useState<CollabAwareness | null>(null)
+  const awarenessRef = useRef<CollabAwareness | null>(null)
 
   // Resizable split
   const [splitPct, setSplitPct] = useState(45)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const splitContainerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
 
-  // Initialize title/source from DB once on first load; local state is authoritative after that
+  // Initialize title from DB once on first load
   const initialized = useRef(false)
   useEffect(() => {
     if (!diagram || initialized.current) return
     initialized.current = true
     setTitle(diagram.title)
-    setSource(diagram.versions[0]?.source ?? '')
   }, [diagram])
 
-  const onMouseDown = useCallback((e: ReactMouseEvent) => {
+  // Stable Yjs refs — key={id} on EditorPane (in App.tsx) ensures remount per diagram
+  const ydocRef        = useRef(new Y.Doc())
+  const ytextRef       = useRef(ydocRef.current.getText('plantuml-source'))
+  const undoManagerRef = useRef(new Y.UndoManager(ytextRef.current))
+  const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // HocuspocusProvider — runs once per mount
+  useEffect(() => {
+    const userName  = user?.fullName ?? user?.firstName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'
+    const userColor = user ? colorFromId(user.id) : '#60a5fa'
+
+    const provider = new HocuspocusProvider({
+      url: `ws://${window.location.hostname}:1234`,
+      name: `diagram-${id}`,
+      document: ydocRef.current,
+      token: async () => (await getToken()) ?? '',
+    })
+
+    const aw = provider.awareness
+    if (aw) {
+      aw.setLocalStateField('user', { name: userName, color: userColor, colorLight: userColor + '33' })
+
+      aw.on('change', () => {
+        const states = [...aw.getStates().entries()]
+        setRemoteUsers(
+          states
+            .filter(([cid]) => cid !== aw.clientID)
+            .map(([, s]) => {
+              type AwarenessState = { user?: { name: string; color: string }; previewCursor?: { x: number; y: number } | null }
+              const state = s as AwarenessState
+              if (!state.user) return null
+              return { ...state.user, previewCursor: state.previewCursor ?? null } satisfies RemoteUser
+            })
+            .filter((u): u is RemoteUser => u !== null)
+        )
+      })
+
+      awarenessRef.current = aw as unknown as CollabAwareness
+      setAwareness(aw as unknown as CollabAwareness)
+    }
+
+    provider.on('status', ({ status }: { status: ConnStatus }) => {
+      onConnStatusChange?.(status)
+    })
+
+    return () => provider.destroy()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ytext observer → debounced SVG render via vanilla trpcClient
+  useEffect(() => {
+    const ytext = ytextRef.current
+    const observer = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(async () => {
+        const source = ytext.toString()
+        if (!source.trim()) { setSvgContent(''); return }
+        const { svg } = await trpcClient.render.svg.mutate({ source })
+        setSvgContent(svg.replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1').replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1'))
+      }, 400)
+    }
+    ytext.observe(observer)
+    return () => ytext.unobserve(observer)
+  }, [])
+
+  // Resizable split drag logic
+  const onDividerMouseDown = useCallback((e: ReactMouseEvent) => {
     e.preventDefault()
     dragging.current = true
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
     const onMouseMove = (ev: globalThis.MouseEvent) => {
-      if (!dragging.current || !containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
+      if (!dragging.current || !splitContainerRef.current) return
+      const rect = splitContainerRef.current.getBoundingClientRect()
       const pct = ((ev.clientX - rect.left) / rect.width) * 100
       setSplitPct(Math.min(MAX_PCT, Math.max(MIN_PCT, pct)))
     }
@@ -64,21 +157,17 @@ export default function EditorPane({ id, onDelete }: EditorPaneProps) {
     window.addEventListener('mouseup', onMouseUp)
   }, [])
 
-  function handleSave() {
-    saveMutation.mutate(
-      { id, title, source },
-      {
-        onSuccess: () => {
-          setSaved(true)
-          setTimeout(() => setSaved(false), 2000)
-        },
-      }
-    )
-  }
+  const handlePreviewCursorMove = useCallback((x: number, y: number) => {
+    awarenessRef.current?.setLocalStateField('previewCursor', { x, y })
+  }, [])
+
+  const handlePreviewCursorLeave = useCallback(() => {
+    awarenessRef.current?.setLocalStateField('previewCursor', null)
+  }, [])
 
   function handleTitleBlur() {
     if (diagram && title !== diagram.title && title.trim()) {
-      saveMutation.mutate({ id, title })
+      titleSaveMutation.mutate({ id, title })
     }
   }
 
@@ -123,6 +212,22 @@ export default function EditorPane({ id, onDelete }: EditorPaneProps) {
           placeholder="Diagram title"
         />
 
+        {/* Remote user presence avatars */}
+        {remoteUsers.length > 0 && (
+          <div className="flex items-center gap-1">
+            {remoteUsers.map((u, i) => (
+              <div
+                key={i}
+                title={u.name}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 select-none"
+                style={{ background: u.color }}
+              >
+                {u.name.slice(0, 2)}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Public toggle */}
         <button
           onClick={handleTogglePublic}
@@ -146,15 +251,6 @@ export default function EditorPane({ id, onDelete }: EditorPaneProps) {
           </button>
         )}
 
-        {/* Save */}
-        <button
-          onClick={handleSave}
-          disabled={saveMutation.isPending}
-          className="text-xs px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium transition-colors"
-        >
-          {saveMutation.isPending ? 'Saving…' : saved ? 'Saved!' : 'Save'}
-        </button>
-
         {/* Delete */}
         <button
           onClick={handleDelete}
@@ -166,15 +262,22 @@ export default function EditorPane({ id, onDelete }: EditorPaneProps) {
       </div>
 
       {/* Split: editor | preview */}
-      <div ref={containerRef} className="flex flex-1 min-h-0 relative">
+      <div ref={splitContainerRef} className="flex flex-1 min-h-0 relative">
         {/* Code panel */}
         <div className="min-h-0 overflow-hidden flex flex-col" style={{ width: `${splitPct}%` }}>
-          <CodeEditor source={source} onChange={setSource} />
+          {awareness && (
+            <CollabEditor
+              ytext={ytextRef.current}
+              awareness={awareness}
+              undoManager={undoManagerRef.current}
+              theme="dark"
+            />
+          )}
         </div>
 
         {/* Drag handle */}
         <div
-          onMouseDown={onMouseDown}
+          onMouseDown={onDividerMouseDown}
           className="relative z-20 flex items-center justify-center shrink-0 cursor-col-resize group"
           style={{ width: 8, background: 'transparent' }}
         >
@@ -183,7 +286,12 @@ export default function EditorPane({ id, onDelete }: EditorPaneProps) {
 
         {/* Preview panel */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <SvgPreview source={source} />
+          <SvgPreview
+            svgContent={svgContent}
+            remoteUsers={remoteUsers}
+            onCursorMove={handlePreviewCursorMove}
+            onCursorLeave={handlePreviewCursorLeave}
+          />
         </div>
       </div>
     </div>

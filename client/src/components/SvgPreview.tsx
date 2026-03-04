@@ -1,31 +1,79 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { trpc } from '../trpc.ts'
+
+interface PreviewCursor { x: number; y: number }
+
+interface RemoteUser {
+  name: string
+  color: string
+  previewCursor: PreviewCursor | null
+}
 
 interface SvgPreviewProps {
-  source: string
+  svgContent: string
+  remoteUsers?: RemoteUser[]
+  onCursorMove?: (x: number, y: number) => void
+  onCursorLeave?: () => void
+}
+
+function CursorMarker({ user, cursor }: { user: RemoteUser; cursor: PreviewCursor }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${cursor.x * 100}%`,
+        top: `${cursor.y * 100}%`,
+        pointerEvents: 'none',
+        userSelect: 'none',
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 4,
+      }}
+    >
+      <svg width="14" height="18" viewBox="0 0 14 18" fill="none" style={{ flexShrink: 0 }}>
+        <path
+          d="M1 1 L1 13 L4 10 L6 16 L8 15 L6 9 L10 9 Z"
+          fill={user.color}
+          stroke="white"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div
+        style={{
+          background: user.color,
+          color: '#fff',
+          fontSize: 11,
+          fontWeight: 600,
+          fontFamily: 'system-ui, sans-serif',
+          padding: '2px 6px',
+          borderRadius: 9999,
+          whiteSpace: 'nowrap',
+          lineHeight: '16px',
+          marginTop: 2,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+        }}
+      >
+        {user.name}
+      </div>
+    </div>
+  )
 }
 
 const MIN_SCALE = 0.1
 const MAX_SCALE = 10
 const INIT = { x: 16, y: 16, scale: 1 }
 
-export default function SvgPreview({ source }: SvgPreviewProps) {
-  const renderMutation = trpc.render.svg.useMutation()
-
-  useEffect(() => {
-    if (!source.trim()) return
-    const t = setTimeout(() => { renderMutation.mutate({ source }) }, 400)
-    return () => clearTimeout(t)
-  }, [source])
-
-  // Zoom/pan state — all positioning goes through the CSS transform
+export default function SvgPreview({ svgContent, remoteUsers, onCursorMove, onCursorLeave }: SvgPreviewProps) {
   const [transform, setTransform] = useState(INIT)
   const transformRef = useRef(transform)
   useEffect(() => { transformRef.current = transform }, [transform])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const panStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 })
+  const throttleRef = useRef(0)
 
   // Wheel zoom — must be non-passive so we can preventDefault
   useEffect(() => {
@@ -75,7 +123,26 @@ export default function SvgPreview({ source }: SvgPreviewProps) {
 
   const onDoubleClick = useCallback(() => setTransform(INIT), [])
 
-  if (!source.trim()) {
+  // Throttled cursor broadcast — normalize against the SVG element's screen bounds
+  const onMouseMove = useCallback((e: ReactMouseEvent) => {
+    if (!onCursorMove) return
+    const now = Date.now()
+    if (now - throttleRef.current < 50) return  // ~20 fps
+    throttleRef.current = now
+    const svgEl = containerRef.current?.querySelector('svg')
+    if (!svgEl) return
+    const rect = svgEl.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    if (x < 0 || x > 1 || y < 0 || y > 1) return
+    onCursorMove(x, y)
+  }, [onCursorMove])
+
+  const onMouseLeave = useCallback(() => {
+    onCursorLeave?.()
+  }, [onCursorLeave])
+
+  if (!svgContent) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm bg-gray-50">
         Start typing PlantUML to see the preview
@@ -83,26 +150,7 @@ export default function SvgPreview({ source }: SvgPreviewProps) {
     )
   }
 
-  if (renderMutation.isPending && !renderMutation.data) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm bg-gray-50">
-        Rendering…
-      </div>
-    )
-  }
-
-  if (renderMutation.isError) {
-    return (
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        <pre className="text-red-500 text-xs whitespace-pre-wrap">{renderMutation.error.message}</pre>
-      </div>
-    )
-  }
-
-  // Strip explicit pixel width/height so the SVG sizes from its viewBox naturally
-  const svg = (renderMutation.data?.svg ?? '')
-    .replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1')
-    .replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1')
+  const activeCursors = remoteUsers?.filter(u => u.previewCursor !== null) ?? []
 
   return (
     <div
@@ -110,8 +158,11 @@ export default function SvgPreview({ source }: SvgPreviewProps) {
       className="flex-1 bg-gray-50 relative overflow-hidden"
       style={{ cursor: 'grab' }}
       onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
     >
+      {/* Transformed layer — cursor markers live here so they zoom/pan with the SVG */}
       <div
         style={{
           position: 'absolute',
@@ -120,8 +171,16 @@ export default function SvgPreview({ source }: SvgPreviewProps) {
           transformOrigin: '0 0',
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         }}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+      >
+        {/* inline-block so it sizes to the SVG; markers use percentage coords against it */}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+          {activeCursors.map((u, i) => (
+            <CursorMarker key={i} user={u} cursor={u.previewCursor!} />
+          ))}
+        </div>
+      </div>
+
       <div className="absolute bottom-2 right-2 text-xs text-gray-400 pointer-events-none select-none">
         Scroll to zoom · Drag to pan · Double-click to reset
       </div>
