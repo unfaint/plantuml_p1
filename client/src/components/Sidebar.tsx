@@ -3,6 +3,19 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 import { trpc } from '../trpc.ts'
 import { useWorkspace } from '../context/WorkspaceContext.tsx'
 
+const DIAGRAM_TYPES = [
+  { key: 'sequence',  label: 'Sequence' },
+  { key: 'class',     label: 'Class' },
+  { key: 'component', label: 'Component' },
+  { key: 'state',     label: 'State' },
+  { key: 'activity',  label: 'Activity' },
+  { key: 'usecase',   label: 'Use Case' },
+  { key: 'object',    label: 'Object' },
+  { key: 'mindmap',   label: 'Mindmap' },
+  { key: 'wbs',       label: 'WBS' },
+  { key: 'gantt',     label: 'Gantt' },
+] as const
+
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
@@ -121,15 +134,18 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onW
     setEditingId(null)
   }
 
+  const [pickerOpen, setPickerOpen] = useState(false)
+
   const createMutation = trpc.diagrams.create.useMutation({
     onSuccess: (diagram) => {
       void utils.diagrams.list.invalidate()
+      setPickerOpen(false)
       onSelect(diagram.id)
     },
   })
 
-  function handleCreate() {
-    createMutation.mutate(selectedWorkspaceId ? { workspace_id: selectedWorkspaceId } : {})
+  function handleCreateType(diagram_type: string) {
+    createMutation.mutate(selectedWorkspaceId ? { workspace_id: selectedWorkspaceId, diagram_type } : { diagram_type })
   }
 
   const currentRole = workspaceList.find(w => w.id === selectedWorkspaceId)?.role ?? null
@@ -145,7 +161,7 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onW
         </button>
         <div className="flex-1" />
         <button
-          onClick={handleCreate}
+          onClick={() => handleCreateType('sequence')}
           title="Sprout New Diagram"
           className="text-green-600 p-1"
           disabled={createMutation.isPending}
@@ -239,15 +255,36 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onW
 
       {/* Bottom actions */}
       <div className="p-3 border-t border-gray-100 flex flex-col gap-2">
-        <button
-          onClick={handleCreate}
-          disabled={createMutation.isPending}
-          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-        >
-          <SproutIcon />
-          {createMutation.isPending ? 'Creating…' : 'Sprout New Diagram'}
-        </button>
-        {!selectedWorkspaceId && (
+        {pickerOpen ? (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose type</span>
+              <button onClick={() => setPickerOpen(false)} className="text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {DIAGRAM_TYPES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => handleCreateType(key)}
+                  disabled={createMutation.isPending}
+                  className="text-xs text-gray-700 hover:bg-green-50 hover:text-green-800 border border-gray-200 rounded px-2 py-1.5 transition-colors disabled:opacity-50 text-left"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setPickerOpen(true)}
+            disabled={createMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+          >
+            <SproutIcon />
+            Sprout New Diagram
+          </button>
+        )}
+        {!selectedWorkspaceId && !pickerOpen && (
           <CreateWorkspaceInline onCreated={id => onWorkspaceChange(id)} />
         )}
       </div>

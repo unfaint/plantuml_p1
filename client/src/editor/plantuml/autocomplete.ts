@@ -24,9 +24,26 @@ const KEYWORDS = [
   'note', 'hnote', 'rnote', 'endnote',
   'note left', 'note right', 'note over',
 
+  // More starters
+  '@startjson', '@endjson', '@startyaml', '@endyaml', '@startsalt', '@endsalt',
+
   // Styling
   'skinparam', 'title', 'header', 'footer',
-  'hide', 'show',
+  'hide', 'show', 'hide empty description',
+
+  // State
+  'state',
+
+  // Activity (new syntax)
+  'start', 'stop', 'fork', 'fork again', 'end fork',
+  'if', 'then', 'else', 'endif', 'while', 'endwhile',
+  'repeat', 'repeatwhile', 'backward', 'detach', 'partition',
+
+  // Component / Deployment
+  'component', 'package', 'node', 'artifact', 'folder', 'cloud', 'frame', 'rectangle',
+
+  // Usecase / Object
+  'usecase', 'object', 'namespace', 'map', 'entry',
 
   // Preprocessor
   '!include', '!define', '!undef', '!if', '!endif',

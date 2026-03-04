@@ -42,7 +42,9 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
   const { data: diagram, isLoading } = trpc.diagrams.get.useQuery({ id })
   const utils = trpc.useUtils()
 
-  const deleteMutation       = trpc.diagrams.delete.useMutation({ onSuccess: onDelete })
+  const deleteMutation       = trpc.diagrams.delete.useMutation({
+    onSuccess: () => { void utils.diagrams.list.invalidate(); onDelete() },
+  })
   const togglePublicMutation = trpc.diagrams.togglePublic.useMutation({
     onSuccess: () => void utils.diagrams.get.invalidate({ id }),
   })

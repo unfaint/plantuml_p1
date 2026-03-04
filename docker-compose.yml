@@ -1,15 +1,13 @@
 services:
   plantuml:
-    image: eclipse-temurin:21-jre-alpine
-    volumes:
-      - ../picoweb_demo/plantuml-1.2026.2.jar:/plantuml.jar:ro
-    command: ["java", "-jar", "/plantuml.jar", "-picoweb:8080"]
+    build:
+      context: plantuml
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/plantuml/svg/~h407374617274756d6c0a40656e64756d6c"]
-      start_period: 10s
+      start_period: 30s
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 15
 
   postgres:
     image: postgres:16-alpine

@@ -8,15 +8,21 @@ export const plantUMLHighlight = styleTags({
   // Participant-type keywords
   'participant actor boundary control entity database collections queue': t.definitionKeyword,
 
-  // Class diagram keywords
-  'class interface abstract enum': t.keyword,
+  // Class / component / deployment structure keywords
+  'class interface abstract enum component package node artifact folder cloud frame rectangle': t.definitionKeyword,
+
+  // Other definition-like keywords
+  'as object namespace usecase': t.definitionKeyword,
+
+  // Class relationships
   'extends implements': t.keyword,
 
-  // Alias keyword
-  'as': t.definitionKeyword,
+  // State / visibility
+  'state hide show': t.keyword,
 
-  // Control flow
+  // Control flow (sequence + activity)
   'group loop alt else opt par break end': t.controlKeyword,
+  'start stop fork partition backward detach kill repeat while endwhile endif': t.controlKeyword,
 
   // Note keywords
   'note hnote rnote endnote': t.keyword,

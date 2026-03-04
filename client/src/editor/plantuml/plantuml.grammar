@@ -28,6 +28,13 @@ lineContent {
   kw<"note"> | kw<"hnote"> | kw<"rnote"> | kw<"endnote"> |
   kw<"over"> | kw<"left"> | kw<"right"> |
   kw<"skinparam"> | kw<"title"> | kw<"header"> | kw<"footer"> |
+  kw<"state"> | kw<"hide"> | kw<"show"> |
+  kw<"start"> | kw<"stop"> | kw<"fork"> | kw<"partition"> |
+  kw<"backward"> | kw<"detach"> | kw<"kill"> |
+  kw<"repeat"> | kw<"while"> | kw<"endwhile"> | kw<"endif"> |
+  kw<"component"> | kw<"package"> | kw<"node"> | kw<"artifact"> |
+  kw<"folder"> | kw<"cloud"> | kw<"frame"> | kw<"rectangle"> |
+  kw<"usecase"> | kw<"object"> | kw<"namespace"> |
   Arrow | ColonOp | String | Identifier | Other
 }
 

@@ -5,19 +5,19 @@ import { router, publicProcedure, protectedProcedure } from './init.js'
 import { diagrams, diagram_versions } from '../db/schema.js'
 import { requireWorkspaceMember, getWorkspaceRole, resolveDiagramPermission } from './workspaceAuth.js'
 
-const STARTER_SOURCE = `@startuml
-title My Diagram
-
-actor User
-participant "App" as App
-participant "Server" as Server
-
-User -> App : action
-App -> Server : request
-Server --> App : response
-App --> User : result
-@enduml
-`
+const STARTERS: Record<string, string> = {
+  sequence:  `@startuml\nactor User\nparticipant App\n\nUser -> App : action\nApp --> User : response\n@enduml\n`,
+  class:     `@startuml\nclass Animal {\n  +name: String\n  +speak()\n}\nclass Dog extends Animal {\n  +speak()\n}\n@enduml\n`,
+  component: `@startuml\npackage Frontend {\n  [UI] --> [API Client]\n}\npackage Backend {\n  [API] --> [Database]\n}\n[API Client] --> [API]\n@enduml\n`,
+  state:     `@startuml\n[*] --> Idle\nIdle --> Running : start\nRunning --> Idle : stop\nRunning --> [*] : done\n@enduml\n`,
+  activity:  `@startuml\nstart\n:Step One;\nif (Condition?) then (yes)\n  :Step Two A;\nelse (no)\n  :Step Two B;\nendif\nstop\n@enduml\n`,
+  usecase:   `@startuml\nactor User\nrectangle System {\n  usecase "Do Thing" as UC1\n  usecase "Other Thing" as UC2\n}\nUser --> UC1\nUser --> UC2\n@enduml\n`,
+  object:    `@startuml\nobject Alice {\n  name = "Alice"\n  age = 30\n}\nobject Bob {\n  name = "Bob"\n}\nAlice -- Bob\n@enduml\n`,
+  mindmap:   `@startmindmap\n* Root\n** Topic A\n*** Detail 1\n*** Detail 2\n** Topic B\n*** Detail 3\n@endmindmap\n`,
+  wbs:       `@startwbs\n* Project\n** Phase 1\n*** Task A\n*** Task B\n** Phase 2\n*** Task C\n@endwbs\n`,
+  gantt:     `@startgantt\n[Task A] lasts 5 days\n[Task B] lasts 3 days\n[Task B] starts at [Task A]'s end\n[Task C] lasts 4 days\n[Task C] starts at [Task A]'s end\n@endgantt\n`,
+}
+const DEFAULT_STARTER = STARTERS['sequence']!
 
 export const diagramsRouter = router({
 
@@ -72,19 +72,20 @@ export const diagramsRouter = router({
     }),
 
   create: protectedProcedure
-    .input(z.object({ workspace_id: z.string().uuid().optional() }).optional())
+    .input(z.object({ workspace_id: z.string().uuid().optional(), diagram_type: z.string().optional() }).optional())
     .mutation(async ({ ctx, input }) => {
       const workspaceId = input?.workspace_id ?? null
       if (workspaceId) {
         await requireWorkspaceMember(ctx.db, workspaceId, ctx.userId)
       }
+      const source = STARTERS[input?.diagram_type ?? ''] ?? DEFAULT_STARTER
       const [diagram] = await ctx.db
         .insert(diagrams)
         .values({ user_id: ctx.userId, workspace_id: workspaceId, title: 'Untitled Diagram' })
         .returning()
       await ctx.db
         .insert(diagram_versions)
-        .values({ diagram_id: diagram!.id, version: 1, source: STARTER_SOURCE })
+        .values({ diagram_id: diagram!.id, version: 1, source })
       return diagram!
     }),
 
