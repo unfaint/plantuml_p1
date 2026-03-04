@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { trpc } from '../trpc.ts'
 import { useWorkspace } from '../context/WorkspaceContext.tsx'
 
@@ -101,6 +102,25 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onW
   )
   const utils = trpc.useUtils()
 
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+
+  const renameMutation = trpc.diagrams.save.useMutation({
+    onSuccess: () => void utils.diagrams.list.invalidate(),
+  })
+
+  function startRename(id: string, currentTitle: string, e: ReactMouseEvent) {
+    e.stopPropagation()
+    setEditingId(id)
+    setEditingTitle(currentTitle)
+  }
+
+  function commitRename(id: string) {
+    const trimmed = editingTitle.trim()
+    if (trimmed) renameMutation.mutate({ id, title: trimmed })
+    setEditingId(null)
+  }
+
   const createMutation = trpc.diagrams.create.useMutation({
     onSuccess: (diagram) => {
       void utils.diagrams.list.invalidate()
@@ -183,19 +203,37 @@ export default function Sidebar({ collapsed, onToggle, selectedId, onSelect, onW
           </div>
         )}
         {diagrams.map(diagram => (
-          <button
+          <div
             key={diagram.id}
-            onClick={() => onSelect(diagram.id)}
-            className={`w-full flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors text-left ${
+            onClick={() => { if (editingId !== diagram.id) onSelect(diagram.id) }}
+            onDoubleClick={e => startRename(diagram.id, diagram.title, e)}
+            className={`w-full flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer ${
               selectedId === diagram.id
                 ? 'bg-green-50 text-green-800 font-medium'
                 : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <DocIcon />
-            <span className="flex-1 truncate">{diagram.title}</span>
-            <span className="text-xs text-gray-400 shrink-0">{formatDate(diagram.updated_at)}</span>
-          </button>
+            {editingId === diagram.id ? (
+              <input
+                autoFocus
+                value={editingTitle}
+                onChange={e => setEditingTitle(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitRename(diagram.id)
+                  if (e.key === 'Escape') setEditingId(null)
+                }}
+                onBlur={() => commitRename(diagram.id)}
+                className="flex-1 min-w-0 text-sm bg-white border border-green-300 rounded px-1 focus:outline-none focus:ring-1 focus:ring-green-400"
+              />
+            ) : (
+              <>
+                <span className="flex-1 truncate">{diagram.title}</span>
+                <span className="text-xs text-gray-400 shrink-0">{formatDate(diagram.updated_at)}</span>
+              </>
+            )}
+          </div>
         ))}
       </div>
 

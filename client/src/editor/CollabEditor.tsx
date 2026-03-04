@@ -7,10 +7,11 @@ interface CollabEditorProps {
   awareness: CollabAwareness
   undoManager: Y.UndoManager
   theme: 'light' | 'dark'
+  errorLine?: number | null
 }
 
-export function CollabEditor({ ytext, awareness, undoManager, theme }: CollabEditorProps) {
-  const containerRef = useCollabCodeMirror({ ytext, awareness, undoManager, theme })
+export function CollabEditor({ ytext, awareness, undoManager, theme, errorLine }: CollabEditorProps) {
+  const containerRef = useCollabCodeMirror({ ytext, awareness, undoManager, theme, errorLine })
 
   return (
     <div

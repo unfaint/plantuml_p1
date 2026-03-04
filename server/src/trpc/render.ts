@@ -6,7 +6,7 @@ export const renderRouter = router({
   svg: publicProcedure
     .input(z.object({ source: z.string() }))
     .mutation(async ({ input }) => {
-      const svg = await renderSvg(input.source)
-      return { svg }
+      const { svg, error } = await renderSvg(input.source)
+      return { svg, error }
     }),
 })

@@ -42,14 +42,15 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
   const { data: diagram, isLoading } = trpc.diagrams.get.useQuery({ id })
   const utils = trpc.useUtils()
 
-  const titleSaveMutation    = trpc.diagrams.save.useMutation()
   const deleteMutation       = trpc.diagrams.delete.useMutation({ onSuccess: onDelete })
   const togglePublicMutation = trpc.diagrams.togglePublic.useMutation({
     onSuccess: () => void utils.diagrams.get.invalidate({ id }),
   })
 
-  const [title, setTitle]           = useState('')
   const [svgContent, setSvgContent] = useState('')
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const [errorExpanded, setErrorExpanded] = useState(false)
+  const renderErrorRef = useRef<string | null>(null)
   const [copied, setCopied]         = useState(false)
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
   const [awareness, setAwareness]   = useState<CollabAwareness | null>(null)
@@ -59,14 +60,6 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
   const [splitPct, setSplitPct] = useState(45)
   const splitContainerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
-
-  // Initialize title from DB once on first load
-  const initialized = useRef(false)
-  useEffect(() => {
-    if (!diagram || initialized.current) return
-    initialized.current = true
-    setTitle(diagram.title)
-  }, [diagram])
 
   // Stable Yjs refs — key={id} on EditorPane (in App.tsx) ensures remount per diagram
   const ydocRef        = useRef(new Y.Doc())
@@ -118,16 +111,28 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
   }, [])
 
   // ytext observer → debounced SVG render via vanilla trpcClient
+  // Debounce is shorter (150ms) when already in error state for faster fix feedback
   useEffect(() => {
     const ytext = ytextRef.current
     const observer = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
+      const delay = renderErrorRef.current !== null ? 1000 : 400
       debounceRef.current = setTimeout(async () => {
         const source = ytext.toString()
-        if (!source.trim()) { setSvgContent(''); return }
-        const { svg } = await trpcClient.render.svg.mutate({ source })
-        setSvgContent(svg.replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1').replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1'))
-      }, 400)
+        if (!source.trim()) {
+          setSvgContent('')
+          setRenderError(null)
+          renderErrorRef.current = null
+          return
+        }
+        const { svg, error } = await trpcClient.render.svg.mutate({ source })
+        renderErrorRef.current = error
+        setRenderError(error)
+        if (!error) {
+          setSvgContent(svg.replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1').replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1'))
+        }
+        // on error: keep previous svgContent so the preview stays on the last good render
+      }, delay)
     }
     ytext.observe(observer)
     // Fire immediately in case ytext was already populated before this observer registered
@@ -169,14 +174,8 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
     awarenessRef.current?.setLocalStateField('previewCursor', null)
   }, [])
 
-  function handleTitleBlur() {
-    if (diagram && title !== diagram.title && title.trim()) {
-      titleSaveMutation.mutate({ id, title })
-    }
-  }
-
   function handleDelete() {
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
+    if (!window.confirm(`Delete this diagram? This cannot be undone.`)) return
     deleteMutation.mutate({ id })
   }
 
@@ -208,15 +207,6 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
     <div className="flex flex-col min-h-0 h-full">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white shrink-0">
-        {/* Editable title */}
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          onBlur={handleTitleBlur}
-          className="flex-1 min-w-0 text-sm font-semibold text-gray-800 bg-transparent border-none outline-none focus:bg-gray-50 focus:ring-1 focus:ring-green-300 rounded px-2 py-1"
-          placeholder="Diagram title"
-        />
-
         {/* Remote user presence avatars */}
         {remoteUsers.length > 0 && (
           <div className="flex items-center gap-1">
@@ -274,14 +264,47 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
       <div ref={splitContainerRef} className="flex flex-1 min-h-0 relative">
         {/* Code panel */}
         <div className="min-h-0 overflow-hidden flex flex-col" style={{ width: `${splitPct}%` }}>
-          {awareness && (
-            <CollabEditor
-              ytext={ytextRef.current}
-              awareness={awareness}
-              undoManager={undoManagerRef.current}
-              theme="dark"
-            />
-          )}
+          {renderError && (() => {
+            const lineMatch = /\[From string \(line (\d+)\)\s*\]/i.exec(renderError)
+            const lineNum = lineMatch ? parseInt(lineMatch[1], 10) : null
+            const label = lineNum !== null ? `syntax error on line ${lineNum}` : 'syntax error'
+            return (
+              <div className="mx-2 my-1.5 shrink-0 rounded border border-red-500/30 bg-red-950/50 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-red-400 shrink-0">
+                    <path d="M5 1L9.5 9H0.5L5 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                    <path d="M5 4.5v1.5M5 7.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-[11px] font-mono text-red-300 flex-1">{label}</span>
+                  <button
+                    onClick={() => setErrorExpanded(e => !e)}
+                    className="text-[10px] text-red-400/60 hover:text-red-300 transition-colors shrink-0 px-1"
+                    title={errorExpanded ? 'Hide details' : 'Show details'}
+                  >
+                    {errorExpanded ? '▲' : '▼'}
+                  </button>
+                </div>
+                {errorExpanded && (
+                  <pre className="px-2.5 pb-2 pt-0 text-[11px] font-mono text-red-300/80 leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap break-all border-t border-red-500/20">
+                    {renderError}
+                  </pre>
+                )}
+              </div>
+            )
+          })()}
+          {(() => {
+            const lineMatch = renderError ? /\[From string \(line (\d+)\)\s*\]/i.exec(renderError) : null
+            const errorLine = lineMatch ? parseInt(lineMatch[1], 10) : null
+            return awareness && (
+              <CollabEditor
+                ytext={ytextRef.current}
+                awareness={awareness}
+                undoManager={undoManagerRef.current}
+                theme="dark"
+                errorLine={errorLine}
+              />
+            )
+          })()}
         </div>
 
         {/* Drag handle */}
