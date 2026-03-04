@@ -28,6 +28,10 @@ export function useCollabCodeMirror({ ytext, awareness, undoManager, theme }: Us
     const themeExt: Extension = theme === 'dark' ? darkEditorTheme : lightEditorTheme
 
     const state = EditorState.create({
+      // Seed initial content from ytext — yCollab's YSyncPluginValue only observes FUTURE
+      // changes; it does not read current ytext state on init. If Hocuspocus synced the
+      // document before this view was created, the editor would be blank without this.
+      doc: ytext.toString(),
       extensions: [
         buildCoreExtensions(),
         themeCompartment.current.of(themeExt),

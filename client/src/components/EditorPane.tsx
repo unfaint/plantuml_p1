@@ -130,6 +130,8 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
       }, 400)
     }
     ytext.observe(observer)
+    // Fire immediately in case ytext was already populated before this observer registered
+    if (ytext.length > 0) observer()
     return () => ytext.unobserve(observer)
   }, [])
 

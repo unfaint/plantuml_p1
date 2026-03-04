@@ -15,7 +15,7 @@ export function CollabEditor({ ytext, awareness, undoManager, theme }: CollabEdi
   return (
     <div
       ref={containerRef}
-      className="h-full"
+      className="flex-1 min-h-0 overflow-hidden"
       style={{ fontSize: 13 }}
     />
   )
