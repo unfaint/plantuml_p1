@@ -8,6 +8,7 @@
   "dependencies": {
     "@hocuspocus/server": "^3.4.4",
     "@clerk/backend": "^1.0.0",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "yjs": "^13.6.0"
   }
 }

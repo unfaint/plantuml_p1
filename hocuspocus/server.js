@@ -1,6 +1,7 @@
 import { Server } from '@hocuspocus/server'
 import { verifyToken } from '@clerk/backend'
 import postgres from 'postgres'
+import * as Y from 'yjs'
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY
 if (!CLERK_SECRET_KEY) { console.error('CLERK_SECRET_KEY is required'); process.exit(1) }
@@ -23,14 +24,19 @@ const server = new Server({
   async onLoadDocument({ documentName, document }) {
     const id = documentName.replace(/^diagram-/, '')
     const [row] = await sql`
-      SELECT source FROM diagram_versions
+      SELECT source, ydoc_update FROM diagram_versions
       WHERE diagram_id = ${id}
       ORDER BY version DESC
       LIMIT 1
     `
-    const ytext = document.getText('plantuml-source')
-    if (ytext.length === 0 && row) {
-      ytext.insert(0, row.source || '')
+    if (!row) return
+    if (row.ydoc_update?.length > 0) {
+      // Restore full Y.Doc state — same op IDs, no CRDT conflict on reconnect
+      Y.applyUpdate(document, row.ydoc_update)
+    } else {
+      // First-time load: binary state not yet stored, seed from plain text
+      const ytext = document.getText('plantuml-source')
+      if (ytext.length === 0) ytext.insert(0, row.source || '')
     }
   },
 
@@ -40,9 +46,10 @@ const server = new Server({
       saveTimers.delete(documentName)
       const id = documentName.replace(/^diagram-/, '')
       const source = document.getText('plantuml-source').toString()
+      const ydocUpdate = Buffer.from(Y.encodeStateAsUpdate(document))
       await sql`
         UPDATE diagram_versions
-        SET source = ${source}
+        SET source = ${source}, ydoc_update = ${ydocUpdate}
         WHERE id = (
           SELECT id FROM diagram_versions
           WHERE diagram_id = ${id}
