@@ -9,7 +9,7 @@ const sql = postgres(process.env.DATABASE_URL ?? 'postgres://postgres:postgres@l
 const saveTimers = new Map()
 
 const server = new Server({
-  port: 1234,
+  port: parseInt(process.env.PORT ?? '1234'),
 
   async onAuthenticate({ token }) {
     if (!token) throw new Error('No token provided')
@@ -54,4 +54,4 @@ const server = new Server({
   },
 })
 
-server.listen().then(() => console.log('Hocuspocus listening on ws://0.0.0.0:1234'))
+server.listen().then(() => console.log(`Hocuspocus listening on ws://0.0.0.0:${process.env.PORT ?? 1234}`))
