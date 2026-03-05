@@ -2,9 +2,11 @@
 FROM node:22-alpine AS client-builder
 WORKDIR /app
 
-# VITE_CLERK_PUBLISHABLE_KEY must be baked at build time (Vite inlines it)
+# VITE_* vars must be baked at build time (Vite inlines them)
 ARG VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_HOCUSPOCUS_URL
+ENV VITE_HOCUSPOCUS_URL=$VITE_HOCUSPOCUS_URL
 
 # Copy workspace manifests + lockfile
 COPY package.json package-lock.json ./

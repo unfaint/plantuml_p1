@@ -75,7 +75,8 @@ export default function EditorPane({ id, onDelete, onConnStatusChange, effective
     const userColor = user ? colorFromId(user.id) : '#60a5fa'
 
     const provider = new HocuspocusProvider({
-      url: `ws://${window.location.hostname}:1234`,
+      url: import.meta.env.VITE_HOCUSPOCUS_URL
+        ?? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:1234`,
       name: `diagram-${id}`,
       document: ydocRef.current,
       token: async () => (await getToken()) ?? '',
